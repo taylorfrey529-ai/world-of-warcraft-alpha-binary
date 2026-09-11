@@ -59,16 +59,29 @@ jobs:
             -o out/TDB_full_world_335.25101_2025_10_21.7z \
             https://github.com/TrinityCore/TrinityCore/releases/download/TDB335.25101/TDB_full_world_335.25101_2025_10_21.7z
 
-      - name: Verify pinned runtime and TDB checksums
+      - name: Verify and normalize payloads
         shell: bash
         run: |
           set -euo pipefail
           cd out
-          echo '07a333e34773e1e1bc7c5613878c70a1224180f452481dcf786be05711148178  mariadb-server-core_11.8.6-0+deb13u1_amd64.deb' | sha256sum -c -
-          echo 'd9dc20e0769be8ec54b9bdd64667c047cf5e0933a0c873626a4ac1cb2be7c300  mariadb-client-core_11.8.6-0+deb13u1_amd64.deb' | sha256sum -c -
-          echo '490c8a2d116001a5f3b0a6d7a7aabf6a7b629366590dc5c3f75b078e931dd129  libaio1t64_0.3.113-8+b1_amd64.deb' | sha256sum -c -
-          echo '4b589c00c7a51172aace2cb2fb3d3ff32daf86c644023126dcfcaa840cc941ea  liburing2_2.9-1_amd64.deb' | sha256sum -c -
+
+          server_pkg=$(find . -maxdepth 1 -type f -name 'mariadb-server-core_*_amd64.deb' -print -quit)
+          client_pkg=$(find . -maxdepth 1 -type f -name 'mariadb-client-core_*_amd64.deb' -print -quit)
+          aio_pkg=$(find . -maxdepth 1 -type f -name 'libaio1t64_*_amd64.deb' -print -quit)
+          uring_pkg=$(find . -maxdepth 1 -type f -name 'liburing2_*_amd64.deb' -print -quit)
+
+          test -n "$server_pkg" && test -n "$client_pkg" && test -n "$aio_pkg" && test -n "$uring_pkg"
+          echo "07a333e34773e1e1bc7c5613878c70a1224180f452481dcf786be05711148178  $server_pkg" | sha256sum -c -
+          echo "d9dc20e0769be8ec54b9bdd64667c047cf5e0933a0c873626a4ac1cb2be7c300  $client_pkg" | sha256sum -c -
+          echo "490c8a2d116001a5f3b0a6d7a7aabf6a7b629366590dc5c3f75b078e931dd129  $aio_pkg" | sha256sum -c -
+          echo "4b589c00c7a51172aace2cb2fb3d3ff32daf86c644023126dcfcaa840cc941ea  $uring_pkg" | sha256sum -c -
           echo 'b426641e6ce8da02e4109b40e570c2db75f89c228a412b3113f82eb3c8725299  TDB_full_world_335.25101_2025_10_21.7z' | sha256sum -c -
+
+          test "$server_pkg" = './mariadb-server-core_11.8.6-0+deb13u1_amd64.deb' || mv "$server_pkg" mariadb-server-core_11.8.6-0+deb13u1_amd64.deb
+          test "$client_pkg" = './mariadb-client-core_11.8.6-0+deb13u1_amd64.deb' || mv "$client_pkg" mariadb-client-core_11.8.6-0+deb13u1_amd64.deb
+          test "$aio_pkg" = './libaio1t64_0.3.113-8+b1_amd64.deb' || mv "$aio_pkg" libaio1t64_0.3.113-8+b1_amd64.deb
+          test "$uring_pkg" = './liburing2_2.9-1_amd64.deb' || mv "$uring_pkg" liburing2_2.9-1_amd64.deb
+
           sha256sum *.deb TDB_full_world_335.25101_2025_10_21.7z > SHA256SUMS
           dpkg-deb -W --showformat='${Package}\t${Version}\n' ./*.deb | sort > PACKAGE-VERSIONS.txt
 
