@@ -1,0 +1,49 @@
+name: Export Debian Trixie Wine Runtime
+
+on:
+  push:
+    paths:
+      - '.github/workflows/export-trixie-wine-runtime.yml'
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Resolve Debian 13 amd64+i386 Wine runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/partial
+          docker run --rm -v "$PWD/out:/out" debian:trixie-slim bash -lc '
+            set -euo pipefail
+            dpkg --add-architecture i386
+            apt-get update
+            apt-get -o Dir::Cache::archives=/out --download-only --no-install-recommends -y install \
+              wine wine64 wine32:i386 \
+              libvulkan1:amd64 libvulkan1:i386 \
+              mesa-vulkan-drivers:amd64 mesa-vulkan-drivers:i386
+          '
+
+      - name: Record immutable package manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd out
+          rm -rf partial lock
+          find . -maxdepth 1 -type f -name '*.deb' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          for pkg in ./*.deb; do
+            dpkg-deb -f "$pkg" Package Version Architecture
+          done > PACKAGE-METADATA.txt
+          printf 'requested=wine wine64 wine32:i386 libvulkan1:amd64 libvulkan1:i386 mesa-vulkan-drivers:amd64 mesa-vulkan-drivers:i386\n' > REQUESTED.txt
+          printf 'deb_count=' >> REQUESTED.txt
+          find . -maxdepth 1 -type f -name '*.deb' | wc -l >> REQUESTED.txt
+
+      - name: Upload Wine runtime artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trixie-wine-runtime-amd64-i386
+          path: out/
+          if-no-files-found: error
+          compression-level: 0
