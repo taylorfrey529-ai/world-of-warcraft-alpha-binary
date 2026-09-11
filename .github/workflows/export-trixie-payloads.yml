@@ -1,0 +1,80 @@
+name: Export Trixie WoW Build Payloads
+
+on:
+  push:
+    paths:
+      - '.github/workflows/export-trixie-payloads.yml'
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Prepare output
+        run: mkdir -p out
+
+      - name: Download pinned Debian 13 packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/out:/out" debian:trixie-slim bash -lc '
+            set -euo pipefail
+            apt-get update
+            cd /out
+            apt-get download \
+              libboost-filesystem1.83-dev=1.83.0-4.2 \
+              libboost-filesystem1.83.0=1.83.0-4.2 \
+              libboost-program-options1.83-dev=1.83.0-4.2 \
+              libboost-program-options1.83.0=1.83.0-4.2 \
+              libboost-regex1.83-dev=1.83.0-4.2 \
+              libboost-regex1.83.0=1.83.0-4.2 \
+              libboost-locale1.83-dev=1.83.0-4.2 \
+              libboost-locale1.83.0=1.83.0-4.2 \
+              libboost-thread1.83-dev=1.83.0-4.2 \
+              libboost-thread1.83.0=1.83.0-4.2 \
+              libboost-atomic1.83-dev=1.83.0-4.2 \
+              libboost-atomic1.83.0=1.83.0-4.2 \
+              libboost-chrono1.83-dev=1.83.0-4.2 \
+              libboost-chrono1.83.0=1.83.0-4.2 \
+              libboost-date-time1.83-dev=1.83.0-4.2 \
+              libboost-date-time1.83.0=1.83.0-4.2 \
+              libboost-system1.83-dev=1.83.0-4.2 \
+              libboost-system1.83.0=1.83.0-4.2 \
+              libboost-serialization1.83-dev=1.83.0-4.2 \
+              libboost-serialization1.83.0=1.83.0-4.2 \
+              libreadline-dev=8.2-6 \
+              libncurses-dev=6.5+20250216-2 \
+              mariadb-server-core=1:11.8.6-0+deb13u1 \
+              mariadb-client-core=1:11.8.6-0+deb13u1 \
+              libaio1t64=0.3.113-8+b1 \
+              liburing2=2.9-1
+          '
+
+      - name: Download pinned Trinity database
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 \
+            -o out/TDB_full_world_335.25101_2025_10_21.7z \
+            https://github.com/TrinityCore/TrinityCore/releases/download/TDB335.25101/TDB_full_world_335.25101_2025_10_21.7z
+
+      - name: Verify pinned runtime and TDB checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd out
+          echo '07a333e34773e1e1bc7c5613878c70a1224180f452481dcf786be05711148178  mariadb-server-core_11.8.6-0+deb13u1_amd64.deb' | sha256sum -c -
+          echo 'd9dc20e0769be8ec54b9bdd64667c047cf5e0933a0c873626a4ac1cb2be7c300  mariadb-client-core_11.8.6-0+deb13u1_amd64.deb' | sha256sum -c -
+          echo '490c8a2d116001a5f3b0a6d7a7aabf6a7b629366590dc5c3f75b078e931dd129  libaio1t64_0.3.113-8+b1_amd64.deb' | sha256sum -c -
+          echo '4b589c00c7a51172aace2cb2fb3d3ff32daf86c644023126dcfcaa840cc941ea  liburing2_2.9-1_amd64.deb' | sha256sum -c -
+          echo 'b426641e6ce8da02e4109b40e570c2db75f89c228a412b3113f82eb3c8725299  TDB_full_world_335.25101_2025_10_21.7z' | sha256sum -c -
+          sha256sum *.deb TDB_full_world_335.25101_2025_10_21.7z > SHA256SUMS
+
+      - name: Upload payload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wow-trixie-build-payloads
+          path: out/
+          if-no-files-found: error
+          compression-level: 0
