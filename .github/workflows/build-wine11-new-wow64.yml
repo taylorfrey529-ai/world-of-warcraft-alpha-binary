@@ -1,0 +1,121 @@
+name: Build Wine 11 New WoW64 for Debian Trixie
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-wine11-new-wow64.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Download official Wine 11.0 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 -o wine-11.0.tar.xz https://dl.winehq.org/wine/source/11.0/wine-11.0.tar.xz
+          sha256sum wine-11.0.tar.xz | tee WINE-SOURCE-SHA256.txt
+          printf '%s\n' 'https://dl.winehq.org/wine/source/11.0/wine-11.0.tar.xz' > WINE-SOURCE-URL.txt
+          tar -xf wine-11.0.tar.xz
+
+      - name: Build new WoW64 inside Debian 13 Trixie
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD:/work" \
+            -w /work/wine-11.0 \
+            debian:trixie-slim bash -lc '
+              set -euo pipefail
+              apt-get update
+              DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                build-essential flex bison pkg-config ca-certificates file xz-utils \
+                gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 \
+                binutils-mingw-w64-i686 binutils-mingw-w64-x86-64 \
+                libx11-dev libxext-dev libxrender-dev libxrandr-dev libxcursor-dev \
+                libxi-dev libxinerama-dev libxcomposite-dev libxfixes-dev libxkbcommon-dev \
+                libfreetype-dev libfontconfig1-dev libgnutls28-dev libunwind-dev \
+                libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
+                libgl-dev libegl-dev libvulkan-dev libxml2-dev libxslt1-dev \
+                libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+
+              ./configure \
+                --prefix=/opt/wine-wow64-11.0 \
+                --enable-archs=i386,x86_64 \
+                --enable-win64 \
+                --disable-tests
+
+              make -j"$(nproc)"
+              rm -rf /work/wine-stage /work/wine-portable
+              make install DESTDIR=/work/wine-stage
+              cp -a /work/wine-stage/opt/wine-wow64-11.0 /work/wine-portable
+            '
+          sudo chown -R "$USER:$USER" wine-stage wine-portable
+
+      - name: Build PE32 smoke executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > hello32.c <<'EOF'
+          #include <stdio.h>
+          int main(void) {
+              puts("WOW64_SMOKE_OK");
+              return 0;
+          }
+          EOF
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-i686 xvfb
+          i686-w64-mingw32-gcc -Os -static -o hello32.exe hello32.c
+          file hello32.exe | tee HELLO32-FILE.txt
+          file wine-portable/bin/wine | tee WINE-LOADER-FILE.txt
+          grep -q 'PE32 executable' HELLO32-FILE.txt
+          grep -Eq 'ELF 64-bit.*x86-64|ELF 64-bit.*x86_64' WINE-LOADER-FILE.txt
+
+      - name: Prove PE32 execution through new WoW64
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1024x768x24 >xvfb.log 2>&1 &
+          XVFB_PID=$!
+          trap 'kill "$XVFB_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do xdpyinfo -display :99 >/dev/null 2>&1 && break; sleep 1; done
+          export WINEPREFIX="$PWD/wine-smoke-prefix"
+          export WINEARCH=wow64
+          export WINEDEBUG=-all
+          rm -rf "$WINEPREFIX"
+          wine-portable/bin/wine wineboot -u
+          wine-portable/bin/wineserver -w
+          wine-portable/bin/wine "$PWD/hello32.exe" | tee WOW64-SMOKE.txt
+          wine-portable/bin/wineserver -w
+          grep -q '^WOW64_SMOKE_OK' WOW64-SMOKE.txt
+          wine-portable/bin/wine --version | tee WINE-VERSION.txt
+
+      - name: Package relocatable runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf wine-smoke-prefix
+          cat > CONFIGURE-ARGS.txt <<'EOF'
+          --prefix=/opt/wine-wow64-11.0
+          --enable-archs=i386,x86_64
+          --enable-win64
+          --disable-tests
+          EOF
+          tar --sort=name --mtime='UTC 2026-01-13' --owner=0 --group=0 --numeric-owner \
+            -czf wine-wow64-11.0-trixie-x86_64.tar.gz wine-portable hello32.exe \
+            WINE-SOURCE-SHA256.txt WINE-SOURCE-URL.txt CONFIGURE-ARGS.txt \
+            WINE-LOADER-FILE.txt HELLO32-FILE.txt WOW64-SMOKE.txt WINE-VERSION.txt
+          sha256sum wine-wow64-11.0-trixie-x86_64.tar.gz | tee wine-wow64-11.0-trixie-x86_64.tar.gz.sha256
+
+      - name: Upload portable new-WoW64 runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: wine-wow64-11.0-trixie-x86_64
+          path: |
+            wine-wow64-11.0-trixie-x86_64.tar.gz
+            wine-wow64-11.0-trixie-x86_64.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
