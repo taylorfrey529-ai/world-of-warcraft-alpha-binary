@@ -1,0 +1,50 @@
+name: Export Trixie Host Multiarch Sync
+
+on:
+  push:
+    paths:
+      - '.github/workflows/export-trixie-host-sync.yml'
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Download current Debian 13 amd64 core counterparts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          docker run --rm -v "$PWD/out:/out" debian:trixie-slim bash -lc '
+            set -euo pipefail
+            apt-get update
+            cd /out
+            apt-get download \
+              apt libapt-pkg7.0 \
+              util-linux mount libblkid1 libmount1 libsmartcols1 libfdisk1 \
+              libcap2 libcap2-bin \
+              systemd systemd-sysv libsystemd0 libsystemd-shared libudev1 udev libpam-systemd
+          '
+
+      - name: Record immutable package manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd out
+          find . -maxdepth 1 -type f -name '*.deb' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          for pkg in ./*.deb; do
+            printf '%s\t%s\t%s\t%s\n' \
+              "$(dpkg-deb -f "$pkg" Package)" \
+              "$(dpkg-deb -f "$pkg" Version)" \
+              "$(dpkg-deb -f "$pkg" Architecture)" \
+              "$(basename "$pkg")"
+          done | sort > PACKAGE-METADATA.tsv
+
+      - name: Upload host sync artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trixie-host-multiarch-sync
+          path: out/
+          if-no-files-found: error
+          compression-level: 0
