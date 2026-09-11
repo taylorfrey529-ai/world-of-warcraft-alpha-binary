@@ -1,0 +1,38 @@
+name: Export Trixie 7zip
+
+on:
+  push:
+    paths:
+      - '.github/workflows/export-trixie-7zip.yml'
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Download and verify Debian 13 7zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          docker run --rm -v "$PWD/out:/out" debian:trixie-slim bash -lc '
+            set -euo pipefail
+            apt-get update
+            cd /out
+            apt-get download 7zip=25.01+dfsg-1~deb13u2
+          '
+          cd out
+          pkg=$(find . -maxdepth 1 -type f -name '7zip_*_amd64.deb' -print -quit)
+          test -n "$pkg"
+          echo "b2cb210bee3be6a10230b38b8645d71846d19364b157f44fd08e1a54cae1652f  $pkg" | sha256sum -c -
+          test "$pkg" = './7zip_25.01+dfsg-1~deb13u2_amd64.deb' || mv "$pkg" 7zip_25.01+dfsg-1~deb13u2_amd64.deb
+          sha256sum 7zip_25.01+dfsg-1~deb13u2_amd64.deb > 7zip_25.01+dfsg-1~deb13u2_amd64.deb.sha256
+
+      - name: Upload 7zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trixie-7zip-25.01
+          path: out/
+          if-no-files-found: error
+          compression-level: 0
