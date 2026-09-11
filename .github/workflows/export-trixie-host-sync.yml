@@ -22,7 +22,7 @@ jobs:
             cd /out
             apt-get download \
               apt libapt-pkg7.0 \
-              util-linux mount libblkid1 libmount1 libsmartcols1 libfdisk1 \
+              util-linux mount libblkid1 libmount1 libsmartcols1 libfdisk1 libuuid1 liblastlog2-2 \
               libcap2 libcap2-bin \
               systemd systemd-sysv libsystemd0 libsystemd-shared libudev1 udev libpam-systemd
           '
