@@ -35,6 +35,7 @@ jobs:
                 libboost-locale-dev libboost-thread-dev \
                 libssl-dev libreadline-dev zlib1g-dev libbz2-dev \
                 libmariadb-dev libmariadb-dev-compat
+              git config --global --add safe.directory /work/TrinityCore
               test "$(git rev-parse HEAD)" = "f5f9bac4fa74da42e2dce419309362aede578e9d"
               cmake -GNinja -S . -B /work/trinity-build \
                 -DCMAKE_BUILD_TYPE=RelWithDebInfo \
