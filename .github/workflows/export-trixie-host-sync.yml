@@ -11,7 +11,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Download current Debian 13 amd64 core counterparts
+      - name: Download current Debian 13 amd64 counterparts and development pins
         shell: bash
         run: |
           set -euo pipefail
@@ -24,7 +24,13 @@ jobs:
               apt libapt-pkg7.0 \
               util-linux mount libblkid1 libmount1 libsmartcols1 libfdisk1 libuuid1 liblastlog2-2 \
               libcap2 libcap2-bin \
-              systemd systemd-sysv libsystemd0 libsystemd-shared libudev1 udev libpam-systemd
+              systemd systemd-sysv libsystemd0 libsystemd-shared libudev1 udev libpam-systemd \
+              default-libmysqlclient-dev libaom-dev libarmadillo-dev libavif-dev \
+              libcurl4-openssl-dev libexpat1-dev libfreexl-dev libgdal-dev libgeotiff-dev \
+              libhdf4-alt-dev libhdf5-dev libheif-dev libkml-dev libmariadb-dev \
+              libmariadb-dev-compat libnetcdf-dev libpq-dev libproj-dev libpython3-dev \
+              libpython3.13-dev libsm-dev libspatialite-dev libssh2-1-dev libssl-dev \
+              libtesseract-dev libxt-dev python3-dev python3.13-dev uuid-dev
           '
 
       - name: Record immutable package manifest
