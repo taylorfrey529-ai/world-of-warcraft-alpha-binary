@@ -1,0 +1,66 @@
+name: Build TrinityCore 3.3.5 on Debian Trixie
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-trinitycore-trixie.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout pinned TrinityCore source
+        uses: actions/checkout@v5
+        with:
+          repository: taylorfrey529-ai/TrinityCore-Rewire
+          ref: f5f9bac4fa74da42e2dce419309362aede578e9d
+          path: TrinityCore
+          fetch-depth: 1
+
+      - name: Build and install inside Debian 13 Trixie
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD:/work" \
+            -w /work/TrinityCore \
+            debian:trixie-slim bash -lc '
+              set -euo pipefail
+              apt-get update
+              DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                ca-certificates cmake ninja-build gcc g++ git make \
+                libboost-filesystem-dev libboost-program-options-dev libboost-regex-dev \
+                libboost-locale-dev libboost-thread-dev \
+                libssl-dev libreadline-dev zlib1g-dev libbz2-dev \
+                libmariadb-dev libmariadb-dev-compat
+              test "$(git rev-parse HEAD)" = "f5f9bac4fa74da42e2dce419309362aede578e9d"
+              cmake -GNinja -S . -B /work/trinity-build \
+                -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+                -DCMAKE_INSTALL_PREFIX=/work/trinity-install \
+                -DSERVERS=1 -DTOOLS=1 -DSCRIPTS=static
+              cmake --build /work/trinity-build --parallel "$(nproc)"
+              cmake --install /work/trinity-build
+              /work/trinity-install/bin/authserver --version
+              /work/trinity-install/bin/worldserver --version
+            '
+
+      - name: Create verification manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' f5f9bac4fa74da42e2dce419309362aede578e9d > trinity-install/TRINITYCORE_COMMIT.txt
+          find trinity-install -type f -print0 | sort -z | xargs -0 sha256sum > trinity-install/SHA256SUMS
+          tar -czf TrinityCore-3.3.5-Trixie-f5f9bac4-install.tar.gz trinity-install
+          sha256sum TrinityCore-3.3.5-Trixie-f5f9bac4-install.tar.gz > TrinityCore-3.3.5-Trixie-f5f9bac4-install.tar.gz.sha256
+
+      - name: Upload Trixie install artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TrinityCore-3.3.5-Trixie-f5f9bac4-install
+          path: |
+            TrinityCore-3.3.5-Trixie-f5f9bac4-install.tar.gz
+            TrinityCore-3.3.5-Trixie-f5f9bac4-install.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
