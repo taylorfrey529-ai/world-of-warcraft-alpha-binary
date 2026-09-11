@@ -14,7 +14,7 @@ jobs:
       - name: Prepare output
         run: mkdir -p out
 
-      - name: Download pinned Debian 13 packages
+      - name: Download Debian 13 build and pinned runtime packages
         shell: bash
         run: |
           set -euo pipefail
@@ -23,26 +23,26 @@ jobs:
             apt-get update
             cd /out
             apt-get download \
-              libboost-filesystem1.83-dev=1.83.0-4.2 \
-              libboost-filesystem1.83.0=1.83.0-4.2 \
-              libboost-program-options1.83-dev=1.83.0-4.2 \
-              libboost-program-options1.83.0=1.83.0-4.2 \
-              libboost-regex1.83-dev=1.83.0-4.2 \
-              libboost-regex1.83.0=1.83.0-4.2 \
-              libboost-locale1.83-dev=1.83.0-4.2 \
-              libboost-locale1.83.0=1.83.0-4.2 \
-              libboost-thread1.83-dev=1.83.0-4.2 \
-              libboost-thread1.83.0=1.83.0-4.2 \
-              libboost-atomic1.83-dev=1.83.0-4.2 \
-              libboost-atomic1.83.0=1.83.0-4.2 \
-              libboost-chrono1.83-dev=1.83.0-4.2 \
-              libboost-chrono1.83.0=1.83.0-4.2 \
-              libboost-date-time1.83-dev=1.83.0-4.2 \
-              libboost-date-time1.83.0=1.83.0-4.2 \
-              libboost-system1.83-dev=1.83.0-4.2 \
-              libboost-system1.83.0=1.83.0-4.2 \
-              libboost-serialization1.83-dev=1.83.0-4.2 \
-              libboost-serialization1.83.0=1.83.0-4.2 \
+              libboost-filesystem1.83-dev \
+              libboost-filesystem1.83.0 \
+              libboost-program-options1.83-dev \
+              libboost-program-options1.83.0 \
+              libboost-regex1.83-dev \
+              libboost-regex1.83.0 \
+              libboost-locale1.83-dev \
+              libboost-locale1.83.0 \
+              libboost-thread1.83-dev \
+              libboost-thread1.83.0 \
+              libboost-atomic1.83-dev \
+              libboost-atomic1.83.0 \
+              libboost-chrono1.83-dev \
+              libboost-chrono1.83.0 \
+              libboost-date-time1.83-dev \
+              libboost-date-time1.83.0 \
+              libboost-system1.83-dev \
+              libboost-system1.83.0 \
+              libboost-serialization1.83-dev \
+              libboost-serialization1.83.0 \
               libreadline-dev=8.2-6 \
               libncurses-dev=6.5+20250216-2 \
               mariadb-server-core=1:11.8.6-0+deb13u1 \
@@ -70,6 +70,7 @@ jobs:
           echo '4b589c00c7a51172aace2cb2fb3d3ff32daf86c644023126dcfcaa840cc941ea  liburing2_2.9-1_amd64.deb' | sha256sum -c -
           echo 'b426641e6ce8da02e4109b40e570c2db75f89c228a412b3113f82eb3c8725299  TDB_full_world_335.25101_2025_10_21.7z' | sha256sum -c -
           sha256sum *.deb TDB_full_world_335.25101_2025_10_21.7z > SHA256SUMS
+          dpkg-deb -W --showformat='${Package}\t${Version}\n' ./*.deb | sort > PACKAGE-VERSIONS.txt
 
       - name: Upload payload artifact
         uses: actions/upload-artifact@v4
