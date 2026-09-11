@@ -36,7 +36,7 @@ jobs:
               libboost-atomic1.83-dev \
               libboost-atomic1.83.0 \
               libboost-chrono1.83-dev \
-              libboost-chrono1.83.0 \
+              libboost-chrono1.83.0t64 \
               libboost-date-time1.83-dev \
               libboost-date-time1.83.0 \
               libboost-system1.83-dev \
