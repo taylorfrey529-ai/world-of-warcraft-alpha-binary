@@ -1,0 +1,44 @@
+name: Export TrinityCore 3.3.5 Source
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout pinned TrinityCore source
+        uses: actions/checkout@v5
+        with:
+          repository: taylorfrey529-ai/TrinityCore-Rewire
+          ref: f5f9bac4fa74da42e2dce419309362aede578e9d
+          path: TrinityCore
+          fetch-depth: 1
+
+      - name: Verify exact source commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C TrinityCore rev-parse HEAD)" = "f5f9bac4fa74da42e2dce419309362aede578e9d"
+          git -C TrinityCore rev-parse HEAD | tee TRINITYCORE_COMMIT.txt
+
+      - name: Archive source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude='TrinityCore/.git' -czf TrinityCore-3.3.5-f5f9bac4fa74da42e2dce419309362aede578e9d.tar.gz TrinityCore
+          sha256sum TrinityCore-3.3.5-f5f9bac4fa74da42e2dce419309362aede578e9d.tar.gz | tee TrinityCore-3.3.5-f5f9bac4fa74da42e2dce419309362aede578e9d.tar.gz.sha256
+
+      - name: Upload source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TrinityCore-3.3.5-f5f9bac4
+          path: |
+            TrinityCore-3.3.5-f5f9bac4fa74da42e2dce419309362aede578e9d.tar.gz
+            TrinityCore-3.3.5-f5f9bac4fa74da42e2dce419309362aede578e9d.tar.gz.sha256
+            TRINITYCORE_COMMIT.txt
+          if-no-files-found: error
+          compression-level: 0
