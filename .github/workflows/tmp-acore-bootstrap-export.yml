@@ -6,22 +6,14 @@ on:
       - 'tmp/acore-bootstrap-20260928'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Create and publish probe
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload harmless text probe
         run: |
           set -euo pipefail
-          tag="tmp-acore-transport-probe"
-          printf 'azerothcore-public-transport-probe\n' > probe.txt
-          gh release delete "$tag" --repo "${GITHUB_REPOSITORY}" --cleanup-tag -y 2>/dev/null || true
-          gh release create "$tag" probe.txt             --repo "${GITHUB_REPOSITORY}"             --target "${GITHUB_SHA}"             --title "Temporary AzerothCore transport probe"             --notes "Temporary transport probe; safe to delete."
-          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/probe.txt"
-          echo "BROWSER_URL=$url"
-          final=$(curl -fsSL -o /dev/null -w '%{url_effective}' "$url")
-          echo "FINAL_URL=$final"
+          printf 'azerothcore-external-transport-probe\n' > probe.txt
+          echo "PROBE_URL=$(curl -fsS -F 'file=@probe.txt' https://0x0.st)"
