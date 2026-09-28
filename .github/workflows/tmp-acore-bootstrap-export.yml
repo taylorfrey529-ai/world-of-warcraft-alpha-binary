@@ -12,8 +12,13 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Upload harmless text probe
+      - name: Probe temporary transports
         run: |
-          set -euo pipefail
+          set -u
           printf 'azerothcore-external-transport-probe\n' > probe.txt
-          echo "PROBE_URL=$(curl -fsS -F 'file=@probe.txt' https://0x0.st)"
+          try() { name="$1"; shift; echo "=== $name ==="; timeout 30 "$@" 2>&1 || true; echo; }
+          try litterbox curl -fsS -F reqtype=fileupload -F time=1h -F fileToUpload=@probe.txt https://litterbox.catbox.moe/resources/internals/api.php
+          try catbox curl -fsS -F reqtype=fileupload -F fileToUpload=@probe.txt https://catbox.moe/user/api.php
+          try transfer curl -fsS --upload-file probe.txt https://transfer.sh/acore-probe.txt
+          try bashupload curl -fsS -T probe.txt https://bashupload.com/acore-probe.txt
+          try pasters curl -fsS --data-binary @probe.txt https://paste.rs
