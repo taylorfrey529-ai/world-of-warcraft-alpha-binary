@@ -1,0 +1,127 @@
+name: TrinityCore MySQL 8 Server Patch
+
+on:
+  push:
+    branches:
+      - tmp/acore-bootstrap-public-20260928
+    paths:
+      - '.github/workflows/trinitycore-mysql84-server-patch.yml'
+
+permissions:
+  contents: write
+
+env:
+  CORE_COMMIT: f5f9bac4fa74da42e2dce419309362aede578e9d
+  CORE_TREE: 39b1b4e92c9efc254a239645d1a6478360c8df54
+  CORE_CMAKE_BLOB: cc306ab0ce120d3d5e92d09b33b5c5442a303b6c
+  RELEASE_TAG: tmp-trinitycore-335-f5f9bac-mysql-server-20260928
+  BUNDLE: trinitycore-335-f5f9bac-mysql-server-patch.tar.gz
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Install MySQL build dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates git cmake ninja-build gcc g++ make pkg-config file \
+            libssl-dev libboost-all-dev libmysqlclient-dev libreadline-dev \
+            zlib1g-dev libbz2-dev libncurses-dev
+          mysql_config --version
+          mysql_config --libs_r
+          dpkg-query -W libmysqlclient-dev
+
+      - name: Checkout pinned TrinityCore source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf /tmp/TrinityCore
+          git clone --filter=blob:none --no-checkout https://github.com/TrinityCore/TrinityCore.git /tmp/TrinityCore
+          git -C /tmp/TrinityCore checkout --detach "$CORE_COMMIT"
+          test "$(git -C /tmp/TrinityCore rev-parse HEAD)" = "$CORE_COMMIT"
+          test "$(git -C /tmp/TrinityCore rev-parse 'HEAD^{tree}')" = "$CORE_TREE"
+          test "$(git -C /tmp/TrinityCore hash-object CMakeLists.txt)" = "$CORE_CMAKE_BLOB"
+
+      - name: Build MySQL-linked servers
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf /tmp/tc-build /tmp/tc-install
+          cmake -S /tmp/TrinityCore -B /tmp/tc-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_INSTALL_PREFIX=/tmp/tc-install \
+            -DSERVERS=1 \
+            -DTOOLS=0 \
+            -DSCRIPTS=static \
+            -DWITH_WARNINGS=0 \
+            -DWITH_WARNINGS_AS_ERRORS=0 \
+            -DBUILD_TESTING=0 \
+            -DNOJEM=ON
+          cmake --build /tmp/tc-build --parallel 2
+          cmake --install /tmp/tc-build
+          test -x /tmp/tc-install/bin/authserver
+          test -x /tmp/tc-install/bin/worldserver
+
+          mkdir -p patch/bin patch/lib patch/evidence
+          cp -a /tmp/tc-install/bin/authserver /tmp/tc-install/bin/worldserver patch/bin/
+          find /usr/lib /lib -type f -name 'libmysqlclient.so.*' -print 2>/dev/null | sort -u | while read -r lib; do
+            cp -L "$lib" patch/lib/"$(basename "$lib")"
+          done
+          test -n "$(find patch/lib -maxdepth 1 -type f -name 'libmysqlclient.so.*' -print -quit)"
+
+          {
+            echo "core_commit=$CORE_COMMIT"
+            echo "core_tree=$CORE_TREE"
+            echo "cmakelists_blob=$CORE_CMAKE_BLOB"
+            echo "client=3.3.5a.12340"
+            echo "build_type=RelWithDebInfo"
+            echo "servers=1"
+            echo "tools=0"
+            echo "scripts=static"
+            echo "build_os=Ubuntu 24.04 amd64"
+            echo "mysql_config_version=$(mysql_config --version)"
+            echo "mysql_config_libs=$(mysql_config --libs_r)"
+          } > patch/evidence/MYSQL-SERVER-PATCH.env
+
+          LD_LIBRARY_PATH="$PWD/patch/lib" ldd patch/bin/authserver > patch/evidence/ldd-authserver.txt
+          LD_LIBRARY_PATH="$PWD/patch/lib" ldd patch/bin/worldserver > patch/evidence/ldd-worldserver.txt
+          ! grep -q 'not found' patch/evidence/ldd-authserver.txt
+          ! grep -q 'not found' patch/evidence/ldd-worldserver.txt
+          grep -q 'libmysqlclient' patch/evidence/ldd-authserver.txt
+          grep -q 'libmysqlclient' patch/evidence/ldd-worldserver.txt
+          ! grep -qi 'libmariadb' patch/evidence/ldd-authserver.txt
+          ! grep -qi 'libmariadb' patch/evidence/ldd-worldserver.txt
+
+          (
+            cd patch
+            find bin lib evidence -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > evidence/SHA256SUMS
+          )
+          tar -C patch -czf "$BUNDLE" .
+          sha256sum "$BUNDLE" > "$BUNDLE.sha256"
+          tar -tzf "$BUNDLE" >/dev/null
+          stat -c 'bytes=%s file=%n' "$BUNDLE"
+          cat patch/evidence/MYSQL-SERVER-PATCH.env
+          grep -E 'mysql|maria' patch/evidence/ldd-worldserver.txt
+
+      - name: Publish verified server patch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag -y 2>/dev/null || true
+          gh release create "$RELEASE_TAG" \
+            "$BUNDLE" "$BUNDLE.sha256" \
+            patch/evidence/MYSQL-SERVER-PATCH.env \
+            patch/evidence/SHA256SUMS \
+            patch/evidence/ldd-authserver.txt \
+            patch/evidence/ldd-worldserver.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Temporary TrinityCore MySQL-linked server patch" \
+            --notes "Pinned TrinityCore 3.3.5 server binaries linked against MySQL client ABI for the active VM handoff."
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json url,assets
